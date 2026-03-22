@@ -1,0 +1,9 @@
+.env
+
+__pycache__/
+*.pyc
+*.pyo
+*.svg
+
+instance/
+svg_logs/

@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SVG Diagram Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0d10;
+    --surface:   #16161a;
+    --surface2:  #1e1e24;
+    --border:    #2a2a35;
+    --accent:    #7c6ef5;
+    --accent2:   #a78bfa;
+    --text:      #e8e8f0;
+    --muted:     #6b6b80;
+    --success:   #34d399;
+    --error:     #f87171;
+    --radius:    12px;
+    --font:      'Space Grotesk', sans-serif;
+    --mono:      'JetBrains Mono', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── GLOW ORBS ── */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb1 { width: 500px; height: 500px; background: #7c6ef5; top: -150px; left: -150px; }
+  .orb2 { width: 400px; height: 400px; background: #a78bfa; bottom: -100px; right: -100px; }
+
+  /* ── LAYOUT ── */
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 80px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+    animation: fadeUp 0.6s ease both;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(124,110,245,0.15);
+    border: 1px solid rgba(124,110,245,0.35);
+    color: var(--accent2);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 100px;
+    margin-bottom: 20px;
+  }
+  .badge::before { content: '◆'; font-size: 8px; }
+  h1 {
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    background: linear-gradient(135deg, #e8e8f0 0%, #a78bfa 60%, #7c6ef5 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 14px;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 420px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  /* ── INPUT CARD ── */
+  .input-card {
+    width: 100%;
+    max-width: 720px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+    margin-bottom: 32px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .input-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 14px 16px;
+    resize: none;
+    height: 80px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  textarea::placeholder { color: var(--muted); }
+  textarea:focus { border-color: var(--accent); }
+
+  .generate-btn {
+    flex-shrink: 0;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0 24px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 100px;
+  }
+  .generate-btn:hover  { background: #6a5ce0; }
+  .generate-btn:active { transform: scale(0.97); }
+  .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-icon { font-size: 20px; }
+
+  /* ── EXAMPLES ── */
+  .examples {
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ex-label {
+    font-size: 12px;
+    color: var(--muted);
+    align-self: center;
+    flex-shrink: 0;
+  }
+  .chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 100px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent2); }
+
+  /* ── OUTPUT AREA ── */
+  .output-section {
+    width: 100%;
+    max-width: 720px;
+    animation: fadeUp 0.4s ease both;
+  }
+
+  /* ── STATES ── */
+  .state-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 60px 28px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .state-icon { font-size: 36px; margin-bottom: 14px; }
+  .state-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .state-sub   { font-size: 14px; line-height: 1.6; }
+
+  /* ── LOADING ── */
+  .loading-dots span {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    margin: 0 3px;
+    animation: bounce 1.2s infinite ease-in-out both;
+  }
+  .loading-dots span:nth-child(1) { animation-delay: 0s; }
+  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  /* ── RESULT CARD ── */
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .result-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .toolbar-actions { display: flex; gap: 8px; }
+
+  .icon-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent2); }
+
+  .svg-preview {
+    padding: 32px 24px;
+    background: #fff;
+  }
+  .svg-preview svg { display: block; max-width: 100%; }
+
+  /* ── CODE VIEW ── */
+  .code-view {
+    display: none;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    padding: 20px;
+    overflow-x: auto;
+  }
+  .code-view.visible { display: block; }
+  .code-view pre {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #a8b1c2;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ── ERROR ── */
+  .error-card {
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.3);
+    border-radius: 20px;
+    padding: 28px;
+    text-align: center;
+    color: var(--error);
+  }
+  .error-card .err-icon { font-size: 28px; margin-bottom: 10px; }
+  .error-card .err-msg  { font-size: 14px; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40%           { transform: scale(1); }
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 14px;
+    padding: 10px 20px;
+    border-radius: 100px;
+    transition: transform 0.3s ease;
+    z-index: 999;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="badge">Powered by Sarvam-M</div>
+    <h1>SVG Diagram<br/>Generator</h1>
+    <p class="subtitle">Describe any concept, system, or process — the AI draws it as a clean SVG diagram instantly.</p>
+  </header>
+
+  <!-- INPUT CARD -->
+  <div class="input-card">
+    <label class="input-label">Describe your diagram</label>
+    <div class="input-row">
+      <textarea id="prompt" placeholder="e.g. How does a login authentication flow work with JWT tokens?"></textarea>
+      <button class="generate-btn" id="genBtn" onclick="generate()">
+        <span class="btn-icon">◈</span>
+        Generate
+      </button>
+    </div>
+    <div class="examples">
+      <span class="ex-label">Try:</span>
+      <button class="chip" onclick="setPrompt(this)">Login flow with JWT</button>
+      <button class="chip" onclick="setPrompt(this)">React component lifecycle</button>
+      <button class="chip" onclick="setPrompt(this)">Machine learning pipeline</button>
+      <button class="chip" onclick="setPrompt(this)">DNS resolution steps</button>
+      <button class="chip" onclick="setPrompt(this)">E-commerce checkout process</button>
+    </div>
+  </div>
+
+  <!-- OUTPUT SECTION -->
+  <div class="output-section">
+    <div id="output">
+      <!-- Default empty state -->
+      <div class="state-box">
+        <div class="state-icon">◇</div>
+        <div class="state-title">Your diagram will appear here</div>
+        <div class="state-sub">Type a description above and click Generate</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+  let currentSVG = '';
+
+  function setPrompt(el) {
+    document.getElementById('prompt').value = el.textContent;
+    document.getElementById('prompt').focus();
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  async function generate() {
+    const prompt = document.getElementById('prompt').value.trim();
+    if (!prompt) { showToast('Please enter a description first'); return; }
+
+    const btn = document.getElementById('genBtn');
+    btn.disabled = true;
+
+    // Show loading state
+    document.getElementById('output').innerHTML = `
+      <div class="state-box">
+        <div class="loading-dots" style="margin-bottom:16px">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="state-title">Generating your diagram…</div>
+        <div class="state-sub">Sarvam-M is thinking and drawing</div>
+      </div>`;
+
+    try {
+      const res  = await fetch('/generate', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ prompt })
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        showError(data.error || 'Something went wrong');
+        return;
+      }
+
+      currentSVG = data.svg;
+      showResult(currentSVG, prompt);
+
+    } catch (err) {
+      showError('Network error — is the server running?');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function fixSVG(svgString) {
+    const parser = new DOMParser();
+    const doc    = parser.parseFromString(svgString, 'image/svg+xml');
+    const svgEl  = doc.querySelector('svg');
+    if (!svgEl) return svgString;
+
+    // Fix broken/flat diamond polygons
+    // LLM often makes top and right point at same Y → renders as flat line
+    // We detect this and rebuild as proper top-right-bottom-left diamond
+    svgEl.querySelectorAll('polygon').forEach(poly => {
+      const raw = poly.getAttribute('points') || '';
+      const pts = raw.trim().split(/\s+/).map(p => {
+        const [x, y] = p.split(',').map(Number);
+        return { x, y };
+      });
+      if (pts.length !== 4) return;
+      const xs = pts.map(p => p.x);
+      const ys = pts.map(p => p.y);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const hw = Math.max((Math.max(...xs) - Math.min(...xs)) / 2, 90);
+      const hh = Math.max((Math.max(...ys) - Math.min(...ys)) / 2, 40);
+      poly.setAttribute('points',
+        `${cx},${cy - hh} ${cx + hw},${cy} ${cx},${cy + hh} ${cx - hw},${cy}`
+      );
+      // Fix text that was positioned for the broken shape
+      svgEl.querySelectorAll('text').forEach(t => {
+        const tx = parseFloat(t.getAttribute('x') || 0);
+        const ty = parseFloat(t.getAttribute('y') || 0);
+        if (Math.abs(tx - cx) < 30 && ty >= cy - hh - 10 && ty <= cy + hh + 10) {
+          t.setAttribute('x', String(cx));
+        }
+      });
+    });
+
+    return new XMLSerializer().serializeToString(doc.documentElement);
+  }
+
+  function showResult(svg, prompt) {
+    const fixed = fixSVG(svg);
+    document.getElementById('output').innerHTML = `
+      <div class="result-card" style="animation: fadeUp 0.4s ease both">
+        <div class="result-toolbar">
+          <span class="result-title">◈ Generated Diagram</span>
+          <div class="toolbar-actions">
+            <button class="icon-btn" onclick="toggleCode()">⟨/⟩ SVG Code</button>
+            <button class="icon-btn" onclick="copySVG()">⎘ Copy SVG</button>
+            <button class="icon-btn" onclick="downloadSVG()">↓ Download</button>
+          </div>
+        </div>
+        <div class="svg-preview" id="svgPreview">${fixed}</div>
+        <div class="code-view" id="codeView">
+          <pre>${escapeHtml(svg)}</pre>
+        </div>
+      </div>`;
+  }
+
+  function showError(msg) {
+    document.getElementById('output').innerHTML = `
+      <div class="error-card" style="animation: fadeUp 0.4s ease both">
+        <div class="err-icon">✕</div>
+        <div class="err-msg">${msg}</div>
+      </div>`;
+  }
+
+  function toggleCode() {
+    document.getElementById('codeView').classList.toggle('visible');
+  }
+
+  function copySVG() {
+    navigator.clipboard.writeText(currentSVG)
+      .then(() => showToast('SVG copied to clipboard!'))
+      .catch(() => showToast('Copy failed'));
+  }
+
+  function downloadSVG() {
+    const blob = new Blob([currentSVG], { type: 'image/svg+xml' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'diagram.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('SVG downloaded!');
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Allow Enter (without Shift) to generate
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('prompt').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); }
+    });
+  });
+</script>
+</body>
+</html>
